@@ -12,27 +12,38 @@ import { moviesApi } from '@/api/moviesApi';
 import { authApi } from '@/api/authApi';
 import { client } from '@/api/client';
 import { Collapsible } from '@/components/Collapsible';
+import { useAppSelector } from '@/store/store';
+import { useDispatch } from 'react-redux';
+import { getFavoritesList, getGenresList, getMovieList, moviesActions } from '@/store/moviesSlice';
 
 export default function HomeScreen() {
-  const [movies, setMovies] = useState<any[]>([]);
-  const [favorites, setFavorites] = useState<any[]>([]);
-  const [genres, setGenres] = useState<{ id: number; name: string; active?: boolean }[]>([]);
+  const dispatch = useDispatch();
+  const { movies, favorites, genres } = useAppSelector((state) => state.moviesSlice);
   const [searchQuery, setSearchQuery] = useState('');
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
+  const [accountId, setAccountId] = useState(null as string);
 
   useEffect(() => {
     initializeUser();
-    fetchGenres();
   }, []);
 
   useEffect(() => {
-    fetchMovies();
-    fetchFavorites();
-  }, [genres]);
+    if (!accountId) return;
+    dispatch(getGenresList());
+    dispatch(
+      getMovieList({ genres: genres.filter((genre) => genre.active).map((genre) => genre.id) }),
+    );
+    dispatch(getFavoritesList());
+  }, [genres, accountId]);
 
   const initializeUser = async () => {
-    const sessionId = await AsyncStorage.getItem('session_id');
-    if (sessionId) return;
+    const session_id = await AsyncStorage.getItem('session_id');
+    if (session_id?.length) {
+      const acc = await authApi.getAccount(session_id);
+      await AsyncStorage.setItem('account_id', acc.data.id.toString());
+      setAccountId(acc.data.id.toString());
+      return;
+    }
 
     try {
       const {
@@ -46,68 +57,42 @@ export default function HomeScreen() {
       const res = await client.post('3/authentication/session/new', {
         request_token: user.data.request_token,
       });
+      console.log('res.data', res.data);
       await AsyncStorage.setItem('session_id', res.data.session_id);
+      initializeUser();
     } catch (error) {
-      console.error('User initialization error:', error);
-    }
-  };
-
-  const fetchMovies = async () => {
-    try {
-      const activeGenreIds = genres.filter((g) => g.active).map((g) => g.id.toString());
-      const res = await moviesApi.getList(activeGenreIds);
-      setMovies(res.data.results);
-    } catch (error) {
-      console.error('Fetching movies error:', error);
-    }
-  };
-
-  const fetchFavorites = async () => {
-    try {
-      const accountId = await AsyncStorage.getItem('account_id');
-      if (!accountId) return;
-
-      const res = await moviesApi.getFavorites(accountId);
-      setFavorites(res.data.results);
-    } catch (error) {
-      console.error('Fetching favorites error:', error);
-    }
-  };
-
-  const fetchGenres = async () => {
-    try {
-      const res = await moviesApi.getGenres();
-      setGenres(res.data.genres);
-    } catch (error) {
-      console.error('Fetching genres error:', error);
+      console.error(error);
+      alert(`cant get user:${error}`);
     }
   };
 
   const toggleFavorite = async (movie: any) => {
     try {
       const accountId = await AsyncStorage.getItem('account_id');
+      console.log('🚀 ~ toggleFavorite ~ accountId:', accountId);
       if (!accountId) return;
 
       const isFavorite = favorites.some((fav) => fav.id === movie.id);
-      await moviesApi.addToFavorite(accountId, movie.id, !isFavorite);
-
-      setFavorites((prevFavorites) =>
-        isFavorite ? prevFavorites.filter((fav) => fav.id !== movie.id) : [...prevFavorites, movie],
-      );
+      const res = await moviesApi.addToFavorite(accountId, movie.id, !isFavorite);
+      console.log(res.data);
+      if (!res.data.success) return;
+      const newFavorites = isFavorite
+        ? favorites.filter((fav) => fav.id !== movie.id)
+        : [...favorites, movie];
+      dispatch(moviesActions.setFavorites(newFavorites));
     } catch (error) {
       console.error('Toggling favorite error:', error);
     }
   };
 
   const toggleGenre = (genreId: number) => {
-    setGenres((prevGenres) =>
-      prevGenres.map((genre) =>
-        genre.id === genreId ? { ...genre, active: !genre.active } : genre,
-      ),
+    const newGenres = genres.map((genre: any) =>
+      genre.id === genreId ? { ...genre, active: !genre.active } : genre,
     );
+    dispatch(moviesActions.setGenres(newGenres));
   };
 
-  const filteredMovies = movies.filter((movie) =>
+  const filteredMovies = movies?.filter((movie) =>
     movie.title.toLowerCase().includes(searchQuery.toLowerCase()),
   );
 
@@ -163,7 +148,7 @@ export default function HomeScreen() {
           <MovieItem
             key={item.id}
             item={item}
-            isFavorite={favorites.some((fav) => fav.id === item.id)}
+            isFavorite={favorites?.some((fav) => fav.id === item.id)}
             addToFav={toggleFavorite}
           />
         )}

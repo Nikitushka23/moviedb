@@ -5,6 +5,7 @@ import { Image, StyleSheet, TouchableOpacity, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { moviesApi } from '@/api/moviesApi';
 import { Link } from 'expo-router';
+import { useAppSelector } from '@/store/store';
 
 interface TMovieItem {
   adult: boolean;
@@ -28,6 +29,7 @@ export const MovieItem: FC<{
   isFavorite: boolean;
   addToFav: (item: any, isFavorite: boolean) => Promise<void>;
 }> = ({ item, isFavorite = false, addToFav }) => {
+  const { genres } = useAppSelector((state) => state.moviesSlice);
   return (
     <Link href={{ pathname: '/details', params: { id: item.id } }} asChild>
       <TouchableOpacity>
@@ -42,9 +44,23 @@ export const MovieItem: FC<{
                 {item.title} {item.release_date && `(${item.release_date.slice(0, 4)})`}
               </ThemedText>
               <ThemedText
-                numberOfLines={4}
+                numberOfLines={3}
                 style={{ fontSize: 12, letterSpacing: -0.1, lineHeight: 15 }}>
                 {item.overview}
+              </ThemedText>
+
+              <ThemedText
+                style={{
+                  fontSize: 12,
+                  letterSpacing: -0.1,
+                  lineHeight: 14,
+                  marginTop: 4,
+                  fontWeight: '500',
+                }}
+                numberOfLines={1}>
+                {item.genre_ids
+                  .map((id) => genres.find((genre) => genre.id === id)?.name)
+                  .join(', ')}
               </ThemedText>
             </View>
 

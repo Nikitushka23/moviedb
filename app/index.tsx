@@ -29,7 +29,7 @@ export default function HomeScreen() {
 
   useEffect(() => {
     if (!accountId) return;
-    dispatch(getGenresList());
+    if (!genres.length) dispatch(getGenresList());
     dispatch(
       getMovieList({ genres: genres.filter((genre) => genre.active).map((genre) => genre.id) }),
     );
